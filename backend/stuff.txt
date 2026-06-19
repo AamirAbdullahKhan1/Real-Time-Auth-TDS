@@ -1,0 +1,15 @@
+{
+  user_id,
+  username,
+  email,
+  event_type,      // LOGIN_SUCCESS, LOGIN_FAILED, REGISTER_SUCCESS, LOGOUT
+  risk_label,      // normal, suspicious, alert
+  severity,        // low, medium, high, critical
+  detected_rule,   // brute_force, geo_anomaly, admin_abuse, etc.
+  ip_address,
+  country,
+  city,
+  user_agent,
+  details,
+  created_at
+}
