@@ -24,6 +24,8 @@ app.use(limiter)
 
 app.use("/api/auth", authRoutes)
 
+app.set("trust proxy", 1);
+
 app.get("/", (req,res) => {
     res.send("Backend is fine!")
 })
