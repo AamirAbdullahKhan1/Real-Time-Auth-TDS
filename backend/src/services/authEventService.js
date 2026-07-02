@@ -1,5 +1,7 @@
 import {pool} from "../config/db.js"
 
+//region and city cols and removed for the time being but can be added later
+
 export async function insertAuthEvent(event){
     const {
         user_id = null,
@@ -11,8 +13,6 @@ export async function insertAuthEvent(event){
         detected_rule = null,
         ip_address = null,
         country = null,
-        region = null,
-        city = null,
         user_agent = null,
         details = {}
     } = event;
@@ -20,7 +20,7 @@ export async function insertAuthEvent(event){
     const query = `
         INSERT INTO auth_events (
             user_id,
-            username.
+            username,
             email,
             event_type,
             risk_label,
@@ -28,12 +28,10 @@ export async function insertAuthEvent(event){
             detected_rule,
             ip_address,
             country,
-            region,
-            city,
             user_agent,
             details
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
         RETURNING id, created_at
     `;
     const values = [
@@ -46,8 +44,6 @@ export async function insertAuthEvent(event){
     detected_rule,
     ip_address,
     country,
-    region,
-    city,
     user_agent,
     details
   ];

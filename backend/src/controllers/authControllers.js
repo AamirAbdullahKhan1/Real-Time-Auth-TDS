@@ -2,11 +2,15 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import {pool} from "../config/db.js"
 import { insertAuthEvent } from "../services/authEventService.js"
+import { geoLookup } from "../utils/geoLookup.js";
+import { getClientIp } from "../utils/getClientIp.js";
 
 const SALT_ROUNDS = 10
 
 export const register = async (req,res) => {
     const {name, email, password} = req.body;
+    const ipAddress = getClientIp(req);
+    const location = geoLookup(ipAddress);
 
     try {
         const existingUser = await pool.query("SELECT * FROM users WHERE email = $1", [email])
@@ -26,10 +30,10 @@ export const register = async (req,res) => {
             risk_label: "normal",
             severity: "low",
             detected_rule: null,
-            ip_address: null, 
-            country: null,
-            region: null,
-            city: null,
+            ip_address: ipAddress,
+            country: location.country,
+            //region: location.region,
+            //city: location.city,
             user_agent: req.headers["user-agent"] || null,
             details: { message: "User registered successfully" }
         });
@@ -52,6 +56,8 @@ export const register = async (req,res) => {
 
 export const login = async (req,res) => {
     const {name, email, password} = req.body
+    const ipAddress = getClientIp(req);
+    const location = geoLookup(ipAddress);
 
     try {
         const user = await pool.query("SELECT * FROM users WHERE email = $1", [email])
@@ -65,10 +71,10 @@ export const login = async (req,res) => {
                 risk_label: "suspicious",
                 severity: "medium",
                 detected_rule: "invalid_credentials",
-                ip_address: null,
-                country: null,
-                region: null,
-                city: null,
+                ip_address: ipAddress,
+                country: location.country,
+                //region: location.region,
+                //city: location.city,
                 user_agent: req.headers["user-agent"] || null,
                 details: { message: "Invalid credentials" }
             });
@@ -77,6 +83,22 @@ export const login = async (req,res) => {
 
         const validPassword = await bcrypt.compare(password, user.rows[0].password_hash)
         if(!validPassword){
+
+            await insertAuthEvent({
+            user_id: user.rows[0].id,
+            username: user.rows[0].name,
+            email: user.rows[0].email,
+            event_type: "LOGIN_FAILED",
+            risk_label: "suspicious",
+            severity: "medium",
+            detected_rule: "invalid_credentials",
+            ip_address: ipAddress,
+            country: location.country,
+            //region: location.region,
+            //city: location.city,
+            user_agent: req.headers["user-agent"] || null,
+            details: { message: "Invalid Credentials" }
+        });
             return res.status(401).json({error: "Invalid Credentials"})
         }
 
@@ -90,10 +112,10 @@ export const login = async (req,res) => {
             risk_label: "normal",
             severity: "low",
             detected_rule: null,
-            ip_address: null,
-            country: null,
-            region: null,
-            city: null,
+            ip_address: ipAddress,
+            country: location.country,
+            //region: location.region,
+            //city: location.city,
             user_agent: req.headers["user-agent"] || null,
             details: { message: "User logged in successfully" }
         });
