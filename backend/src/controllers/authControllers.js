@@ -55,7 +55,7 @@ export const register = async (req,res) => {
 }
 
 export const login = async (req,res) => {
-    const {name, email, password} = req.body
+    const {email, password} = req.body
     const ipAddress = getClientIp(req);
     const location = geoLookup(ipAddress);
 
@@ -70,13 +70,13 @@ export const login = async (req,res) => {
                 event_type: "LOGIN_FAILED",
                 risk_label: "suspicious",
                 severity: "medium",
-                detected_rule: "invalid_credentials",
+                detected_rule: "non_existent_user",
                 ip_address: ipAddress,
                 country: location.country,
                 //region: location.region,
                 //city: location.city,
                 user_agent: req.headers["user-agent"] || null,
-                details: { message: "Invalid credentials" }
+                details: { message: "User not found" }
             });
             return res.status(401).json({error: "User not found"})
         }
@@ -120,7 +120,7 @@ export const login = async (req,res) => {
             details: { message: "User logged in successfully" }
         });
 
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
             token,
             user:{
@@ -129,6 +129,33 @@ export const login = async (req,res) => {
                 email: user.rows[0].email
             }
         })
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({error: "Internal server error"})
+    }
+}
+
+export const logout  = async (req,res) => {
+    const ipAddress = getClientIp(req);
+    const location = geoLookup(ipAddress);
+
+    try {
+        await insertAuthEvent({
+            user_id: req.user.id,
+            username: req.user.name || null,
+            email: req.user.email,
+            event_type: "LOGOUT_SUCCESS",
+            risk_label: "normal",
+            severity: "low",
+            detected_rule: null,
+            ip_address: ipAddress,
+            country: location.country,
+            //region: location.region,
+            //city: location.city,
+            user_agent: req.headers["user-agent"] || null,
+            details: { message: "User logged out successfully" }
+        });
+        return res.status(200).json({success: true, message: "User logged out successfully"})
     } catch (error) {
         console.log(error)
         res.status(500).json({error: "Internal server error"})
