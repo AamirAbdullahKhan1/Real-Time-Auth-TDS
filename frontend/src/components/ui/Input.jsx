@@ -1,10 +1,10 @@
-import React, { forwardRef } from 'react';
+import { forwardRef } from 'react';
 
 const Input = forwardRef(({ label, icon: Icon, rightIcon: RightIcon, error, className = '', ...props }, ref) => {
   return (
     <div className={`flex flex-col gap-1.5 ${className}`}>
       {label && (
-        <label className="text-sm font-medium text-text-main">
+        <label htmlFor={props.id || props.name} className="text-sm font-medium text-text-main">
           {label}
         </label>
       )}
@@ -15,6 +15,7 @@ const Input = forwardRef(({ label, icon: Icon, rightIcon: RightIcon, error, clas
           </div>
         )}
         <input
+          id={props.id || props.name}
           ref={ref}
           className={`
             block w-full rounded-md border py-2.5 sm:text-sm transition-colors duration-200
@@ -32,7 +33,7 @@ const Input = forwardRef(({ label, icon: Icon, rightIcon: RightIcon, error, clas
           </div>
         )}
       </div>
-      {error && <p className="text-sm text-red-600 mt-1">{error}</p>}
+      {error && <p role="alert" className="text-sm text-red-600 mt-1">{error}</p>}
     </div>
   );
 });

@@ -1,8 +1,10 @@
 import {pool} from "../config/db.js"
+import { writeAuthEvent } from "./logger.js";
+import { sendToSplunk } from "./splunk.js";
 
 //region and city cols and removed for the time being but can be added later
 
-export async function insertAuthEvent(event){
+export async function insertAuthEvent(event, db = pool){
     const {
         user_id = null,
         username = null,
@@ -48,7 +50,22 @@ export async function insertAuthEvent(event){
     details
   ];
 
-  const result = await pool.query(query, values)
-  return result.rows[0]
-        
+  const result = await db.query(query, values)
+  return { ...event, ...result.rows[0] };
+}
+
+export async function publishAuthEvent(event) {
+  const { id, created_at, user_id, event_type, ip_address, country,
+    risk_label, severity, detected_rule } = event;
+  const record = {
+    event_id: String(id), timestamp: new Date(created_at).toISOString(),
+    service: "ironclad", user_id, event_type, source_ip: ip_address,
+    country, risk_label, severity, reason_code: detected_rule,
+  };
+  await writeAuthEvent(record).catch(error => {
+    console.error("Local auth event write failed:", error.code);
+  });
+  if (process.env.SPLUNK_HEC_ENABLED === "true") {
+    void sendToSplunk(record);
+  }
 }

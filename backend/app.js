@@ -13,22 +13,31 @@ const app = express()
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     limit: 100, // Limit each IP to 100 requests per `window`
-    message: "Too many requests from this IP, please try again later."
+    message: { error: "Too many requests from this IP, please try again later." }
 });
 
 app.use(express.json())
-app.use(cors())
+if (process.env.FRONTEND_ORIGIN) app.use(cors({ origin: process.env.FRONTEND_ORIGIN }));
 app.use(helmet())
 app.use(morgan("dev"))
 app.use(limiter)
 
 app.use("/api/auth", authRoutes)
 
-app.set("trust proxy", 1);
+if (process.env.TRUST_PROXY === "loopback") app.set("trust proxy", "loopback");
 
 app.get("/", (req,res) => {
     res.send("Backend is fine!")
 })
+
+app.use((error, req, res, next) => {
+    if (res.headersSent) return next(error);
+    if (error.status === 400) return res.status(400).json({ error: "Invalid request body" });
+    console.error("Request failed:", error.code);
+    res.status(500).json({ error: "Internal server error" });
+});
+
+if (!process.env.JWT_SECRET) throw new Error("JWT_SECRET is required");
 
 const PORT = process.env.PORT || 3000;
 

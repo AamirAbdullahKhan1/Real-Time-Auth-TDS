@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Shield, User, Mail, Lock, CheckCircle2, ArrowRight, Info } from 'lucide-react';
 import SplitLayout from '../layouts/SplitLayout';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
+import { authRequest, clearSession } from '../authApi';
 
 const Register = () => {
   const navigate = useNavigate();
@@ -14,15 +15,35 @@ const Register = () => {
     confirmPassword: ''
   });
 
+  const [error, setError] = useState('');
+  const [pending, setPending] = useState(false);
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Register attempt:', formData);
-    // Navigate to 2FA passing the entered email in state
-    navigate('/2fa', { state: { email: formData.email } });
+    if (pending) return;
+    const { fullName, email, password, confirmPassword } = formData;
+    if (password !== confirmPassword) {
+      setError('Passwords must match.');
+      return;
+    }
+
+    setError('');
+    setPending(true);
+    try {
+      const challenge = await authRequest('/register', {
+        method: 'POST',
+        body: { name: fullName, email, password },
+      });
+      clearSession();
+      navigate('/2fa', { replace: true, state: challenge });
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setPending(false);
+    }
   };
 
   const bannerContent = (
@@ -34,19 +55,10 @@ const Register = () => {
       </h1>
       
       <p className="text-base text-gray-400 font-medium max-w-md leading-relaxed">
-        Join thousands of organizations protecting their data architecture with real-time auth threat intelligence.
+        Create an Ironclad account and review your recent sign-in activity.
       </p>
 
-      <div className="flex items-center gap-3 bg-white/5 backdrop-blur-md rounded-full p-2 pr-5 border border-white/10 w-fit">
-        <div className="flex -space-x-2.5">
-          <img className="w-8 h-8 rounded-full border-2 border-dark-bg object-cover" src="https://i.pravatar.cc/100?img=11" alt="User" />
-          <img className="w-8 h-8 rounded-full border-2 border-dark-bg object-cover" src="https://i.pravatar.cc/100?img=5" alt="User" />
-          <div className="w-8 h-8 rounded-full border-2 border-dark-bg bg-primary flex items-center justify-center text-[10px] font-bold shadow-lg">
-            +5k
-          </div>
-        </div>
-        <span className="text-xs font-semibold tracking-wide text-gray-200">Security Admins online</span>
-      </div>
+
     </div>
   );
 
@@ -57,7 +69,7 @@ const Register = () => {
           <Shield className="text-white w-5 h-5" />
         </div>
         <h2 className="text-2xl font-bold text-text-main tracking-tight mb-1">Create Account</h2>
-        <p className="text-xs font-medium text-text-muted">Enterprise-grade security workspace.</p>
+        <p className="text-xs font-medium text-text-muted">We will email a code to verify your address.</p>
       </div>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
@@ -113,8 +125,9 @@ const Register = () => {
           </p>
         </div>
 
-        <Button type="submit" className="mt-1 py-2.5 text-xs font-bold tracking-wider uppercase">
-          Sign Up
+        {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+        <Button type="submit" disabled={pending} className="mt-1 py-2.5 text-xs font-bold tracking-wider uppercase">
+          {pending ? 'Creating account…' : 'Sign Up'}
           <ArrowRight className="w-4 h-4 ml-1" />
         </Button>
       </form>

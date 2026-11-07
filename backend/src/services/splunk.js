@@ -14,11 +14,11 @@ export async function sendToSplunk(eventData) {
 
   try {
     const payload = {
-      time: Math.floor(Date.now() / 1000),
-      host: "xamp-backend",
-      source: "xamp-auth",
-      sourcetype: "xamp:auth:json",
-      index: "xen-auth",
+      time: Date.parse(eventData.timestamp) / 1000,
+      host: process.env.SPLUNK_HEC_HOST || "ironclad-backend",
+      source: "ironclad-auth",
+      sourcetype: process.env.SPLUNK_HEC_SOURCETYPE || "_json",
+      ...(process.env.SPLUNK_HEC_INDEX ? { index: process.env.SPLUNK_HEC_INDEX } : {}),
       event: eventData
     };
 
@@ -30,6 +30,7 @@ export async function sendToSplunk(eventData) {
       timeout: 5000
     });
 
+    if (response.data?.code !== 0) throw new Error("HEC did not accept the event");
     return response.data;
   } catch (error) {
     console.error(
