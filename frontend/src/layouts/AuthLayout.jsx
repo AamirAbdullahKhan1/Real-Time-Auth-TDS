@@ -13,7 +13,7 @@ const AuthLayout = ({ children, headerRight }) => {
       {/* Header */}
       <header className="w-full flex justify-between items-center py-6 px-8 relative z-10">
         <Link to="/" className="text-xl font-bold tracking-tight text-text-main">
-          Ironclad Dash
+          Ironclad
         </Link>
         <div className="flex items-center gap-6 text-sm font-medium text-gray-600">
           {headerRight ? headerRight : (
