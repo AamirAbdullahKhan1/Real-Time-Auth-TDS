@@ -18,7 +18,8 @@ const limiter = rateLimit({
 });
 
 app.use(express.json())
-if (process.env.FRONTEND_ORIGIN) app.use(cors({ origin: process.env.FRONTEND_ORIGIN }));
+const frontendOrigin = process.env.FRONTEND_ORIGIN?.trim().replace(/\/+$/, "");
+if (frontendOrigin) app.use(cors({ origin: frontendOrigin }));
 app.use(helmet())
 app.use(morgan("dev"))
 app.use(limiter)

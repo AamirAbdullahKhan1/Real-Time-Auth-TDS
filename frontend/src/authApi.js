@@ -1,4 +1,7 @@
-const base = import.meta.env.VITE_API_BASE_URL || '/api/auth'
+const configuredBase = import.meta.env.VITE_API_BASE_URL?.trim().replace(/\/+$/, '')
+const base = configuredBase && /^https?:\/\/[^/]+$/i.test(configuredBase)
+  ? configuredBase + '/api/auth'
+  : configuredBase || '/api/auth'
 const tokenKey = 'ironclad.session'
 
 export function saveSession(token) {
