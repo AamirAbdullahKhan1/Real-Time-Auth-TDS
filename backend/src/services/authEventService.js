@@ -10,6 +10,7 @@ export async function insertAuthEvent(event, db = pool){
         username = null,
         email = null,
         event_type,
+        account_role = null,
         risk_label = "normal",
         severity = "low",
         detected_rule = null,
@@ -31,9 +32,10 @@ export async function insertAuthEvent(event, db = pool){
             ip_address,
             country,
             user_agent,
-            details
+            details,
+            account_role
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
         RETURNING id, created_at
     `;
     const values = [
@@ -47,7 +49,8 @@ export async function insertAuthEvent(event, db = pool){
     ip_address,
     country,
     user_agent,
-    details
+    details,
+    account_role
   ];
 
   const result = await db.query(query, values)
@@ -55,12 +58,12 @@ export async function insertAuthEvent(event, db = pool){
 }
 
 export async function publishAuthEvent(event) {
-  const { id, created_at, user_id, event_type, ip_address, country,
+  const { id, created_at, user_id, event_type, ip_address, country, account_role,
     risk_label, severity, detected_rule } = event;
   const record = {
     event_id: String(id), timestamp: new Date(created_at).toISOString(),
     service: "ironclad", user_id, event_type, source_ip: ip_address,
-    country, risk_label, severity, reason_code: detected_rule,
+    country, role: account_role ?? "unknown", risk_label, severity, reason_code: detected_rule,
   };
   await writeAuthEvent(record).catch(error => {
     console.error("Local auth event write failed:", error.code);

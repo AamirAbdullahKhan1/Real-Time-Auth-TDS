@@ -13,6 +13,16 @@ export function hasSession() {
   return Boolean(sessionStorage.getItem(tokenKey))
 }
 
+export async function startVerification(path, body) {
+  const challenge = await authRequest(path, { method: 'POST', body })
+  if (typeof challenge.challengeId !== 'string' || !challenge.challengeId ||
+      typeof challenge.email !== 'string' || !challenge.email) {
+    throw new Error('The server did not start email verification. Check that the current backend is running.')
+  }
+  clearSession()
+  return { challengeId: challenge.challengeId, email: challenge.email }
+}
+
 export async function authRequest(path, { method = 'GET', body } = {}) {
   const token = sessionStorage.getItem(tokenKey)
   const response = await fetch(base + path, {

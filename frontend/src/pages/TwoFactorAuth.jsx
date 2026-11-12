@@ -3,7 +3,7 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ShieldCheck } from 'lucide-react';
 import AuthLayout from '../layouts/AuthLayout';
 import Button from '../components/ui/Button';
-import Input from '../components/ui/Input';
+import CodeInput from '../components/ui/CodeInput';
 import { authRequest, saveSession } from '../authApi';
 
 export default function TwoFactorAuth() {
@@ -25,6 +25,7 @@ export default function TwoFactorAuth() {
         method: 'POST',
         body: { challengeId: state.challengeId, code },
       });
+      if (typeof token !== 'string' || !token) throw new Error('The server did not return a session. Sign in again to retry.');
       saveSession(token);
       navigate('/', { replace: true });
     } catch (error) {
@@ -43,19 +44,8 @@ export default function TwoFactorAuth() {
           Enter the six-digit code sent to <strong>{state.email}</strong>. It expires in 10 minutes.
         </p>
         <form onSubmit={verify} className="mt-6 space-y-4">
-          <Input
-            label="Verification code"
-            name="verification-code"
-            value={code}
-            onChange={event => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
-            type="text"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            pattern="[0-9]{6}"
-            required
-            autoFocus
-            error={error}
-          />
+          <CodeInput value={code} onChange={setCode} disabled={pending} />
+          {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
           <Button type="submit" disabled={pending || code.length !== 6}>
             {pending ? 'Verifying...' : 'Verify and continue'}
           </Button>

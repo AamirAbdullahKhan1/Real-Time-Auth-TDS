@@ -3,6 +3,7 @@ import Register from './pages/Register';
 import SignIn from './pages/SignIn';
 import TwoFactorAuth from './pages/TwoFactorAuth';
 import Dashboard from './pages/Dashboard';
+import PasswordReset from './pages/PasswordReset';
 import { hasSession } from './authApi';
 import './App.css';
 
@@ -18,6 +19,7 @@ export default function App() {
         <Route path="/dashboard" element={<Navigate to="/" replace />} />
         <Route path="/register" element={<Register />} />
         <Route path="/login" element={<SignIn />} />
+        <Route path="/forgot-password" element={<PasswordReset />} />
         <Route path="/2fa" element={<TwoFactorAuth />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

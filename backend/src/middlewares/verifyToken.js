@@ -11,7 +11,7 @@ export async function verifyToken(req, res, next) {
     }
 
     const { rows } = await pool.query(
-        `SELECT u.id, u.name, u.email
+        `SELECT u.id, u.name, u.email, u.role
            FROM auth_sessions s JOIN users u ON u.id = s.user_id
           WHERE s.id = $1 AND s.email_challenge_id IS NOT NULL
             AND s.revoked_at IS NULL AND s.expires_at > now()`,

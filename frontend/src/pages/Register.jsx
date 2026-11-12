@@ -4,7 +4,7 @@ import { Shield, User, Mail, Lock, CheckCircle2, ArrowRight, Info } from 'lucide
 import SplitLayout from '../layouts/SplitLayout';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
-import { authRequest, clearSession } from '../authApi';
+import { startVerification } from '../authApi';
 
 const Register = () => {
   const navigate = useNavigate();
@@ -33,11 +33,11 @@ const Register = () => {
     setError('');
     setPending(true);
     try {
-      const challenge = await authRequest('/register', {
-        method: 'POST',
-        body: { name: fullName, email, password },
+      const challenge = await startVerification('/register', {
+        name: fullName,
+        email,
+        password,
       });
-      clearSession();
       navigate('/2fa', { replace: true, state: challenge });
     } catch (error) {
       setError(error.message);

@@ -1,13 +1,14 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import AuthLayout from '../layouts/AuthLayout';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
-import { authRequest, clearSession } from '../authApi';
+import { startVerification } from '../authApi';
 
 const SignIn = () => {
   const navigate = useNavigate();
+  const { state } = useLocation();
   const [formData, setFormData] = useState({
     email: '',
     password: ''
@@ -27,11 +28,10 @@ const SignIn = () => {
     setError('');
     setPending(true);
     try {
-      const challenge = await authRequest('/login', {
-        method: 'POST',
-        body: { email: formData.email, password: formData.password },
+      const challenge = await startVerification('/login', {
+        email: formData.email,
+        password: formData.password,
       });
-      clearSession();
       navigate('/2fa', { replace: true, state: challenge });
     } catch (error) {
       setError(error.message);
@@ -48,6 +48,7 @@ const SignIn = () => {
           <p className="text-sm font-medium text-text-muted">Enter your password to request an email verification code.</p>
         </div>
 
+        {state?.passwordReset && <p role="status" className="mb-4 text-sm text-green-800">Password changed. Sign in with your new password.</p>}
         <form onSubmit={handleSubmit} className="flex flex-col gap-6">
           <Input
             label="Email Address"
@@ -63,6 +64,7 @@ const SignIn = () => {
           <div className="relative">
             <div className="flex justify-between items-center mb-1.5">
               <label htmlFor="login-password" className="text-sm font-medium text-text-main">Password</label>
+              <Link to="/forgot-password" className="text-sm font-semibold text-primary">Forgot password?</Link>
             </div>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">

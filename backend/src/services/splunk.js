@@ -1,10 +1,13 @@
 import axios from "axios";
 import dotenv from "dotenv";
+import { readFileSync } from "node:fs";
+import { Agent } from "node:https";
 
 dotenv.config();
 
 const SPLUNK_HEC_URL = process.env.SPLUNK_HEC_URL;
 const SPLUNK_HEC_TOKEN = process.env.SPLUNK_HEC_TOKEN;
+let hecAgent;
 
 export async function sendToSplunk(eventData) {
   if (!SPLUNK_HEC_URL || !SPLUNK_HEC_TOKEN) {
@@ -13,6 +16,9 @@ export async function sendToSplunk(eventData) {
   }
 
   try {
+    if (!hecAgent && process.env.SPLUNK_HEC_CA_FILE) {
+      hecAgent = new Agent({ ca: readFileSync(process.env.SPLUNK_HEC_CA_FILE) });
+    }
     const payload = {
       time: Date.parse(eventData.timestamp) / 1000,
       host: process.env.SPLUNK_HEC_HOST || "ironclad-backend",
@@ -27,6 +33,8 @@ export async function sendToSplunk(eventData) {
         Authorization: `Splunk ${SPLUNK_HEC_TOKEN}`,
         "Content-Type": "application/json"
       },
+      httpsAgent: hecAgent,
+      maxRedirects: 0,
       timeout: 5000
     });
 

@@ -6,6 +6,7 @@ import { rateLimit } from "express-rate-limit";
 import { connectDB } from "./src/config/db.js"
 import dotenv from 'dotenv'
 import authRoutes from "./src/routes/authRoutes.js"
+import { emailConfigured } from "./src/services/verificationEmail.js";
 dotenv.config();
 
 const app = express()
@@ -38,6 +39,9 @@ app.use((error, req, res, next) => {
 });
 
 if (!process.env.JWT_SECRET) throw new Error("JWT_SECRET is required");
+if (!emailConfigured()) {
+    console.warn("Email verification is unavailable. Configure RESEND_API_KEY and OTP_FROM_EMAIL in backend/.env.");
+}
 
 const PORT = process.env.PORT || 3000;
 
