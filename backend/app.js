@@ -10,6 +10,16 @@ import { emailConfigured } from "./src/services/verificationEmail.js";
 dotenv.config();
 
 const app = express()
+const trustedProxyHops = process.env.TRUST_PROXY_HOPS;
+if (trustedProxyHops !== undefined) {
+    const hops = Number(trustedProxyHops);
+    if (!/^\d+$/.test(trustedProxyHops) || !Number.isSafeInteger(hops)) {
+        throw new Error("TRUST_PROXY_HOPS must be a non-negative integer");
+    }
+    app.set("trust proxy", hops);
+} else if (process.env.TRUST_PROXY === "loopback") {
+    app.set("trust proxy", "loopback");
+}
 
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
@@ -25,8 +35,6 @@ app.use(morgan("dev"))
 app.use(limiter)
 
 app.use("/api/auth", authRoutes)
-
-if (process.env.TRUST_PROXY === "loopback") app.set("trust proxy", "loopback");
 
 app.get("/", (req,res) => {
     res.send("Backend is fine!")
