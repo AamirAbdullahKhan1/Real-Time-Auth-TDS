@@ -8,6 +8,44 @@ import { getClientIp } from "../utils/getClientIp.js";
 import { createEmailChallenge, codeMatches } from "../services/emailChallengeService.js";
 import { emailConfigured, sendVerificationCode } from "../services/verificationEmail.js";
 
+const attemptLimits = { admin: 2, employee: 3, customer: 5 };
+const lockSeconds = 300;
+
+async function lockAccount(client, userId) {
+    const { rows: [account] } = await client.query(
+        "UPDATE users SET auth_locked_until = clock_timestamp() + interval '5 minutes' WHERE id = $1 RETURNING auth_locked_until",
+        [userId],
+    );
+    await client.query(
+        "UPDATE auth_email_challenges SET invalidated_at = clock_timestamp() WHERE user_id = $1 AND consumed_at IS NULL AND invalidated_at IS NULL AND purpose <> 'password_reset'",
+        [userId],
+    );
+    return account.auth_locked_until;
+}
+
+function lockedResponse(res, until) {
+    const retryAfter = Math.max(1, Math.ceil((new Date(until).getTime() - Date.now()) / 1000));
+    return res.set("Retry-After", String(retryAfter)).status(429).json({
+        error: `Sign-in is temporarily blocked. Try again in ${Math.ceil(retryAfter / 60)} minute(s).`,
+        retryAfter,
+    });
+}
+
+function failedAttempt(req, type, user, attempts, limit, lockedUntil) {
+    const isPassword = type === "LOGIN_FAILED";
+    return {
+        ...audit(req, type, user, isPassword ? "invalid_credentials" : "invalid_code"),
+        severity: lockedUntil && user.role === "admin" ? "critical"
+            : lockedUntil || user.role === "admin" || (user.role === "employee" && attempts > 1) ? "high" : "medium",
+        details: {
+            failure_count: attempts,
+            attempt_limit: limit,
+            detection_rule: lockedUntil ? (isPassword ? "password_lockout" : "otp_lockout") : null,
+            lockout_seconds: lockedUntil ? lockSeconds : null,
+        },
+    };
+}
+
 function normalizeEmail(input) {
     if (typeof input !== "string") return null;
     const email = input.trim().toLowerCase();
@@ -94,16 +132,42 @@ export async function login(req, res) {
     }
 
     const user = await findUser(email);
-    if (!user || !await bcrypt.compare(password, user.password_hash)) {
-        const reason = user ? "invalid_credentials" : "non_existent_user";
-        await publishAuthEvent(await insertAuthEvent(audit(req, "LOGIN_FAILED", user, reason)));
+    if (!user) {
+        await publishAuthEvent(await insertAuthEvent(audit(req, "LOGIN_FAILED", null, "non_existent_user")));
         return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    if (!emailConfigured()) return emailUnavailable(res);
-    const challenge = await withTransaction(client => createEmailChallenge(client, user.id, "login", user.password_hash));
-    if (!challenge) return res.status(429).json({ error: "A code was requested recently or the hourly limit was reached. Wait before requesting another." });
-    return deliverChallenge(req, res, user, challenge);
+    const result = await withTransaction(async client => {
+        const { rows: [account] } = await client.query(
+            `SELECT *, auth_locked_until > clock_timestamp() AS locked,
+                    last_password_failure_at > clock_timestamp() - interval '5 minutes' AS recent_failure
+               FROM users WHERE id = $1 FOR UPDATE`,
+            [user.id],
+        );
+        if (!account) return { invalid: true };
+        if (account.locked) return { lockedUntil: account.auth_locked_until };
+        if (!await bcrypt.compare(password, account.password_hash)) {
+            const attempts = account.recent_failure && !account.auth_locked_until ? account.password_failures + 1 : 1;
+            const limit = attemptLimits[account.role];
+            const lockedUntil = attempts >= limit ? await lockAccount(client, account.id) : null;
+            await client.query(
+                `UPDATE users SET password_failures = $2, last_password_failure_at = clock_timestamp(),
+                    auth_locked_until = $3 WHERE id = $1`,
+                [account.id, attempts, lockedUntil],
+            );
+            const event = await insertAuthEvent(failedAttempt(req, "LOGIN_FAILED", account, attempts, limit, lockedUntil), client);
+            return { invalid: true, lockedUntil, event };
+        }
+        await client.query("UPDATE users SET password_failures = 0, last_password_failure_at = NULL, auth_locked_until = NULL WHERE id = $1", [account.id]);
+        if (!emailConfigured()) return { mailUnavailable: true };
+        return { account, challenge: await createEmailChallenge(client, account.id, "login", account.password_hash) };
+    });
+    if (result.event) await publishAuthEvent(result.event);
+    if (result.lockedUntil) return lockedResponse(res, result.lockedUntil);
+    if (result.invalid) return res.status(401).json({ error: "Invalid credentials" });
+    if (result.mailUnavailable) return emailUnavailable(res);
+    if (!result.challenge) return res.status(429).json({ error: "A code was requested recently or the hourly limit was reached. Wait before requesting another." });
+    return deliverChallenge(req, res, result.account, result.challenge);
 }
 
 function emailUnavailable(res) {
@@ -138,7 +202,8 @@ function validCode(challengeId, code) {
 async function lockChallenge(client, challengeId, reset) {
     // Use the same lock order as issuance and password changes.
     const { rows: [user] } = await client.query(
-        `SELECT u.id, u.name, u.email, u.role
+        `SELECT u.id, u.name, u.email, u.role,
+                CASE WHEN u.auth_locked_until > clock_timestamp() THEN u.auth_locked_until END AS locked_until
            FROM users u JOIN auth_email_challenges c ON u.id = c.user_id
           WHERE c.id = $1 AND (c.purpose = 'password_reset') = $2 FOR UPDATE OF u`,
         [challengeId, reset],
@@ -165,13 +230,17 @@ export async function verifyEmailCode(req, res) {
     const result = await withTransaction(async client => {
         const { user, challenge } = await lockChallenge(client, challengeId, false);
         if (!challenge) return { events: [] };
-        if (!usable(challenge)) {
+        if (user.locked_until) return { events: [], lockedUntil: user.locked_until };
+        const limit = attemptLimits[user.role];
+        if (!usable(challenge) || challenge.failed_attempts >= limit) {
             return { events: [], unavailable: true };
         }
         if (!codeMatches(challenge, code)) {
             await client.query("UPDATE auth_email_challenges SET failed_attempts = failed_attempts + 1 WHERE id = $1", [challengeId]);
-            const event = await insertAuthEvent(audit(req, "OTP_FAILED", user, "invalid_code"), client);
-            return { events: [event], unavailable: challenge.failed_attempts === 4 };
+            const attempts = challenge.failed_attempts + 1;
+            const lockedUntil = attempts >= limit ? await lockAccount(client, user.id) : null;
+            const event = await insertAuthEvent(failedAttempt(req, "OTP_FAILED", user, attempts, limit, lockedUntil), client);
+            return { events: [event], lockedUntil };
         }
 
         await client.query("UPDATE auth_email_challenges SET consumed_at = now() WHERE id = $1", [challengeId]);
@@ -179,9 +248,11 @@ export async function verifyEmailCode(req, res) {
         const token = await createSession(user, challengeId, client);
         const otpEvent = await insertAuthEvent(audit(req, "OTP_VERIFIED", user), client);
         const authEvent = await insertAuthEvent(audit(req, challenge.purpose === "register" ? "REGISTER_SUCCESS" : "LOGIN_SUCCESS", user), client);
-        return { token, user, events: [otpEvent, authEvent] };
+        const { id, name, email, role } = user;
+        return { token, user: { id, name, email, role }, events: [otpEvent, authEvent] };
     });
     for (const event of result.events) await publishAuthEvent(event);
+    if (result.lockedUntil) return lockedResponse(res, result.lockedUntil);
     if (!result.token) {
         const error = result.unavailable ? "This code is no longer usable. Sign in again for a new code." : "Incorrect verification code.";
         return res.status(401).json({ error });
@@ -216,7 +287,10 @@ export async function resetPassword(req, res) {
             await client.query("UPDATE auth_email_challenges SET failed_attempts = failed_attempts + 1 WHERE id = $1", [challengeId]);
             return { event: await insertAuthEvent(audit(req, "PASSWORD_RESET_FAILED", user, "invalid_code"), client) };
         }
-        await client.query("UPDATE users SET password_hash = $1 WHERE id = $2", [await bcrypt.hash(password, 10), user.id]);
+        await client.query(
+            "UPDATE users SET password_hash = $1, password_failures = 0, last_password_failure_at = NULL, auth_locked_until = NULL WHERE id = $2",
+            [await bcrypt.hash(password, 10), user.id],
+        );
         await client.query("UPDATE auth_email_challenges SET consumed_at = now() WHERE id = $1", [challengeId]);
         await client.query(
             "UPDATE auth_email_challenges SET invalidated_at = now() WHERE user_id = $1 AND consumed_at IS NULL AND invalidated_at IS NULL",

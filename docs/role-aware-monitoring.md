@@ -57,3 +57,57 @@ index=ironclad_auth source="ironclad-auth"
 ```
 
 Verify each search with your test account and save it to the dashboard or as a search in Splunk. For scheduled searches, include the full correlation lookback and configure alert suppression as appropriate.
+
+## Role-based lockouts
+
+Apply `backend/migrations/004_auth_lockouts.sql` before deploying the backend. Password failures are counted per account across source IPs. A correct password resets the streak. Five minutes without another password failure starts a new streak. OTP attempts are counted per challenge. Both types trigger a five-minute account sign-in lock at 2 failures for admins, 3 for employees, and 5 for customers. Password recovery remains available. A successful reset clears the lock.
+
+### Detection counts over time
+
+Save this as a line or stacked column chart.
+
+```spl
+index=ironclad_auth source="ironclad-auth"
+| spath
+| where isnotnull(detection_rule)
+| dedup event_id
+| timechart span=5m count by detection_rule
+```
+
+### Lockouts by role and severity
+
+Save this as a table or bar chart.
+
+```spl
+index=ironclad_auth source="ironclad-auth"
+| spath
+| where isnotnull(detection_rule)
+| dedup event_id
+| stats count as detections by role severity detection_rule
+| sort - detections
+```
+
+### Separate alert for high-priority lockouts
+
+Run the search below over the last five minutes. In Search & Reporting choose **Save As → Alert**, schedule it every five minutes, set the trigger to **Number of Results > 0**, and enable **Add to Triggered Alerts** if available in your license. Use a separate dashboard table for the wider list of suspicious events. Re-run with a wider time range when investigating historical events.
+
+```spl
+index=ironclad_auth source="ironclad-auth" earliest=-5m latest=now
+| spath
+| where isnotnull(detection_rule) AND (severity="high" OR severity="critical")
+| dedup event_id
+| table _time event_id event_type role severity user_id source_ip country failure_count attempt_limit detection_rule
+```
+
+Source IP and country provide triage context. They do not alter the lockout severity because geographic history and IP reputation are not evaluated.
+
+### Suspicious sign-ins table
+
+```spl
+index=ironclad_auth source="ironclad-auth"
+| spath
+| search risk_label="suspicious" event_type IN ("LOGIN_FAILED","OTP_FAILED")
+| dedup event_id
+| table _time event_type role severity user_id source_ip country failure_count attempt_limit detection_rule
+| sort 0 - _time
+```

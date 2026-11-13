@@ -59,11 +59,15 @@ export async function insertAuthEvent(event, db = pool){
 
 export async function publishAuthEvent(event) {
   const { id, created_at, user_id, event_type, ip_address, country, account_role,
-    risk_label, severity, detected_rule } = event;
+    risk_label, severity, detected_rule, details } = event;
   const record = {
     event_id: String(id), timestamp: new Date(created_at).toISOString(),
     service: "ironclad", user_id, event_type, source_ip: ip_address,
     country, role: account_role ?? "unknown", risk_label, severity, reason_code: detected_rule,
+    failure_count: details?.failure_count,
+    attempt_limit: details?.attempt_limit,
+    detection_rule: details?.detection_rule,
+    lockout_seconds: details?.lockout_seconds,
   };
   await writeAuthEvent(record).catch(error => {
     console.error("Local auth event write failed:", error.code);

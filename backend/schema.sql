@@ -57,3 +57,7 @@ ALTER TABLE auth_events ADD COLUMN IF NOT EXISTS account_role text
 ALTER TABLE auth_email_challenges DROP CONSTRAINT IF EXISTS auth_email_challenges_purpose_check;
 ALTER TABLE auth_email_challenges ADD CONSTRAINT auth_email_challenges_purpose_check
     CHECK (purpose IN ('register', 'login', 'password_reset'));
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS password_failures integer NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS last_password_failure_at timestamptz,
+    ADD COLUMN IF NOT EXISTS auth_locked_until timestamptz;
